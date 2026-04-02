@@ -1,0 +1,103 @@
+{
+  "@@locale": "en",
+  "appTitle": "ChefStash",
+  "@appTitle": {
+    "description": "The application title"
+  },
+  "vaultScreenTitle": "ChefStash",
+  "@vaultScreenTitle": {
+    "description": "Title for the main vault screen"
+  },
+  "searchRecipes": "Search recipes...",
+  "@searchRecipes": {
+    "description": "Placeholder text for recipe search field"
+  },
+  "addRecipe": "Add Recipe",
+  "@addRecipe": {
+    "description": "Button text to add a new recipe"
+  },
+  "emptyVaultTitle": "Your vault is empty",
+  "@emptyVaultTitle": {
+    "description": "Title shown when no recipes exist"
+  },
+  "emptyVaultSubtitle": "Paste a URL or add a recipe manually to get started",
+  "@emptyVaultSubtitle": {
+    "description": "Subtitle shown when no recipes exist"
+  },
+  "extractRecipe": "Extract Recipe",
+  "@extractRecipe": {
+    "description": "Button to extract recipe from URL"
+  },
+  "addManually": "Or add manually",
+  "@addManually": {
+    "description": "Button to add recipe manually"
+  },
+  "pasteRecipeUrl": "Paste recipe URL",
+  "@pasteRecipeUrl": {
+    "description": "Hint for URL input field"
+  },
+  "freeTierInfo": "Free tier: 10 recipes\nPremium: Unlimited recipes",
+  "@freeTierInfo": {
+    "description": "Information about free vs premium tiers"
+  },
+  "upgradeToPremium": "Upgrade to Premium",
+  "@upgradeToPremium": {
+    "description": "Title for premium upgrade dialog"
+  },
+  "premiumFeatures": "• Unlimited recipes\n• Custom tags\n• Export/Import backups",
+  "@premiumFeatures": {
+    "description": "List of premium features"
+  },
+  "upgradePrice": "Upgrade for $19.99",
+  "@upgradePrice": {
+    "description": "Premium upgrade button with price"
+  },
+  "recipeAddedSuccess": "Recipe added successfully!",
+  "@recipeAddedSuccess": {
+    "description": "Success message when recipe is added"
+  },
+  "extractingRecipe": "Extracting recipe...",
+  "@extractingRecipe": {
+    "description": "Loading message during extraction"
+  },
+  "extractionFailed": "Could not extract recipe from URL. Please try adding manually.",
+  "@extractionFailed": {
+    "description": "Error message when extraction fails"
+  },
+  "settings": "Settings",
+  "@settings": {
+    "description": "Settings screen title"
+  },
+  "exportRecipes": "Export Recipes",
+  "@exportRecipes": {
+    "description": "Export recipes button"
+  },
+  "importRecipes": "Import Recipes",
+  "@importRecipes": {
+    "description": "Import recipes button"
+  },
+  "cookingMode": "Cooking Mode",
+  "@cookingMode": {
+    "description": "Cooking mode screen title"
+  },
+  "ingredients": "Ingredients",
+  "@ingredients": {
+    "description": "Ingredients tab label"
+  },
+  "instructions": "Instructions",
+  "@instructions": {
+    "description": "Instructions tab label"
+  },
+  "cancel": "Cancel",
+  "@cancel": {
+    "description": "Cancel button text"
+  },
+  "save": "Save",
+  "@save": {
+    "description": "Save button text"
+  },
+  "maybeLater": "Maybe Later",
+  "@maybeLater": {
+    "description": "Dismiss premium dialog button"
+  }
+}

@@ -1,0 +1,70 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'features/vault/presentation/screens/vault_screen.dart';
+import 'core/services/iap_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize IAP service
+  await IAPService.instance.initialize();
+
+  runApp(const ProviderScope(child: ChefStashApp()));
+}
+
+class ChefStashApp extends StatelessWidget {
+  const ChefStashApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'ChefStash',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        useMaterial3: true,
+        // Brutalist design with high contrast
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF2C3E50), // Dark slate
+          brightness: Brightness.light,
+          primary: const Color(0xFF2C3E50),
+          secondary: const Color(0xFFE67E22), // Warm orange
+          surface: Colors.white,
+          onSurface: const Color(0xFF2C3E50),
+        ),
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          centerTitle: true,
+          elevation: 0,
+          backgroundColor: Colors.white,
+          foregroundColor: Color(0xFF2C3E50),
+        ),
+        // Large, readable typography for kitchen use
+        textTheme: const TextTheme(
+          displayLarge: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C3E50),
+          ),
+          titleLarge: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2C3E50),
+          ),
+          bodyLarge: TextStyle(
+            fontSize: 18,
+            color: Color(0xFF2C3E50),
+          ),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFE67E22),
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+      home: const VaultScreen(),
+    );
+  }
+}
