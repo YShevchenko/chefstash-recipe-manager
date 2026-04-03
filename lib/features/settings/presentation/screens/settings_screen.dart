@@ -1,22 +1,20 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:file_picker/file_picker.dart';
-import '../../../../core/database/database_helper.dart';
 import '../../../../core/services/iap_service.dart';
-import '../../../vault/presentation/screens/vault_screen.dart';
+import '../../../../data/repositories/recipe_repository.dart';
 
 /// Settings screen with export/import and premium features
-class SettingsScreen extends ConsumerStatefulWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
   @override
-  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+  State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen> {
   bool _isExporting = false;
   bool _isImporting = false;
 
@@ -26,21 +24,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
 
-    setState(() {
-      _isExporting = true;
-    });
+    setState(() => _isExporting = true);
 
     try {
-      // Export recipes as JSON
-      final jsonString = await DatabaseHelper.instance.exportAllRecipesAsJson();
+      final jsonString =
+          await RecipeRepository.instance.exportAllAsJson();
 
-      // Create temp file
       final directory = await getTemporaryDirectory();
-      final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-      final file = File('${directory.path}/chefstash_backup_$timestamp.json');
+      final timestamp =
+          DateTime.now().toIso8601String().replaceAll(':', '-');
+      final file = File(
+          '${directory.path}/chefstash_backup_$timestamp.json');
       await file.writeAsString(jsonString);
 
-      // Share file
       await Share.shareXFiles(
         [XFile(file.path)],
         subject: 'ChefStash Recipe Backup',
@@ -54,16 +50,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Export failed: $e')),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isExporting = false;
-        });
-      }
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -73,35 +64,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
 
-    setState(() {
-      _isImporting = true;
-    });
+    setState(() => _isImporting = true);
 
     try {
-      // Pick JSON file
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['json'],
       );
 
       if (result == null || result.files.single.path == null) {
-        if (mounted) {
-          setState(() {
-            _isImporting = false;
-          });
-        }
+        if (mounted) setState(() => _isImporting = false);
         return;
       }
 
       final file = File(result.files.single.path!);
       final jsonString = await file.readAsString();
 
-      // Import recipes
-      final imported = await DatabaseHelper.instance.importRecipesFromJson(jsonString);
-
-      // Refresh recipes list
-      ref.invalidate(recipesProvider);
-      ref.invalidate(recipeCountProvider);
+      final imported =
+          await RecipeRepository.instance.importFromJson(jsonString);
 
       if (!mounted) return;
 
@@ -110,16 +90,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Import failed: $e')),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isImporting = false;
-        });
-      }
+      if (mounted) setState(() => _isImporting = false);
     }
   }
 
@@ -144,7 +119,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Upgrade to Premium for unlimited recipes, custom tags, and export/import functionality.',
+              'Upgrade to Premium for unlimited recipes, custom tags, and export/import.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12),
             ),
@@ -159,13 +134,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onPressed: () async {
               final success = await IAPService.instance.purchase();
               if (!context.mounted) return;
-
               Navigator.pop(context);
-
               if (success) {
-                setState(() {}); // Refresh premium status
+                setState(() {});
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Premium unlocked! Thank you!')),
+                  const SnackBar(
+                      content: Text('Premium unlocked! Thank you!')),
                 );
               }
             },
@@ -189,14 +163,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       body: ListView(
         children: [
-          // Premium Status Section
+          // Premium upsell banner
           if (!isPremium)
             Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFFE67E22).withOpacity(0.1),
-                border: Border.all(color: const Color(0xFFE67E22), width: 2),
+                color: const Color(0xFFE67E22).withAlpha(25),
+                border:
+                    Border.all(color: const Color(0xFFE67E22), width: 2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -225,11 +200,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onPressed: () async {
                       final success = await IAPService.instance.purchase();
                       if (!context.mounted) return;
-
                       if (success) {
-                        setState(() {}); // Refresh premium status
+                        setState(() {});
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Premium unlocked! Thank you!')),
+                          const SnackBar(
+                              content:
+                                  Text('Premium unlocked! Thank you!')),
                         );
                       }
                     },
@@ -242,7 +218,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
 
-          // Data Management Section
+          // Restore purchases
+          ListTile(
+            leading: const Icon(Icons.restore),
+            title: const Text('Restore Purchases'),
+            subtitle: const Text('Recover previous premium purchase'),
+            onTap: () async {
+              final restored =
+                  await IAPService.instance.restorePurchases();
+              if (!mounted) return;
+              // ignore: use_build_context_synchronously
+              final messenger = ScaffoldMessenger.of(context);
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text(restored
+                      ? 'Premium restored!'
+                      : 'No purchases found'),
+                ),
+              );
+              setState(() {});
+            },
+          ),
+
+          const Divider(),
+
           const ListTile(
             title: Text(
               'DATA MANAGEMENT',
@@ -261,7 +260,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Export Recipes'),
             subtitle: Text(
               isPremium ? 'Backup all recipes as JSON' : 'Premium only',
-              style: TextStyle(color: isPremium ? null : Colors.grey),
+              style:
+                  TextStyle(color: isPremium ? null : Colors.grey),
             ),
             trailing: _isExporting
                 ? const SizedBox(
@@ -280,7 +280,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             title: const Text('Import Recipes'),
             subtitle: Text(
               isPremium ? 'Restore from JSON backup' : 'Premium only',
-              style: TextStyle(color: isPremium ? null : Colors.grey),
+              style:
+                  TextStyle(color: isPremium ? null : Colors.grey),
             ),
             trailing: _isImporting
                 ? const SizedBox(
@@ -291,9 +292,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 : const Icon(Icons.chevron_right),
             onTap: _isImporting ? null : _importRecipes,
           ),
+
           const Divider(),
 
-          // About Section
           const ListTile(
             title: Text(
               'ABOUT',
@@ -307,7 +308,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const ListTile(
             leading: Icon(Icons.info_outline),
             title: Text('Version'),
-            subtitle: Text('1.0.0 (Build 1)'),
+            subtitle: Text('1.0.1 (Build 1)'),
           ),
           const ListTile(
             leading: Icon(Icons.business),

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+import '../../../../domain/models/recipe.dart';
 
-/// Cooking Mode screen with giant text and screen wakelock
+/// Cooking Mode screen — FR-021, FR-022, FR-023
+/// Enlarged typography, wakelock, ingredient checkboxes
 class CookingModeScreen extends StatefulWidget {
-  final Map<String, dynamic> recipe;
+  final Recipe recipe;
 
   const CookingModeScreen({super.key, required this.recipe});
 
@@ -11,43 +13,42 @@ class CookingModeScreen extends StatefulWidget {
   State<CookingModeScreen> createState() => _CookingModeScreenState();
 }
 
-class _CookingModeScreenState extends State<CookingModeScreen> with SingleTickerProviderStateMixin {
+class _CookingModeScreenState extends State<CookingModeScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  Set<int> _checkedIngredients = {};
+  final Set<int> _checkedIngredients = {};
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _enableWakelock();
+    WakelockPlus.enable();
   }
 
   @override
   void dispose() {
-    _disableWakelock();
+    WakelockPlus.disable();
     _tabController.dispose();
     super.dispose();
   }
 
-  Future<void> _enableWakelock() async {
-    await WakelockPlus.enable();
-  }
-
-  Future<void> _disableWakelock() async {
-    await WakelockPlus.disable();
-  }
-
   @override
   Widget build(BuildContext context) {
-    final ingredients = (widget.recipe['ingredients'] as String?)?.split('\n') ?? [];
-    final instructions = (widget.recipe['instructions'] as String?)?.split('\n\n') ?? [];
+    final ingredients = widget.recipe.ingredients;
+    final instructions = widget.recipe.instructions;
 
     return Scaffold(
       backgroundColor: const Color(0xFF2C3E50),
       appBar: AppBar(
-        title: const Text(
-          'Cooking Mode',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          widget.recipe.title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 18,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         backgroundColor: const Color(0xFF2C3E50),
         iconTheme: const IconThemeData(color: Colors.white),
@@ -65,7 +66,7 @@ class _CookingModeScreenState extends State<CookingModeScreen> with SingleTicker
       body: TabBarView(
         controller: _tabController,
         children: [
-          // Ingredients tab
+          // Ingredients tab — FR-023: tap to strike through
           ListView.builder(
             padding: const EdgeInsets.all(24),
             itemCount: ingredients.length,
@@ -111,8 +112,11 @@ class _CookingModeScreenState extends State<CookingModeScreen> with SingleTicker
                           style: TextStyle(
                             fontSize: 20,
                             height: 1.5,
-                            color: Colors.white,
-                            decoration: isChecked ? TextDecoration.lineThrough : null,
+                            color:
+                                isChecked ? Colors.white54 : Colors.white,
+                            decoration: isChecked
+                                ? TextDecoration.lineThrough
+                                : null,
                             decorationColor: Colors.white54,
                             decorationThickness: 2,
                           ),

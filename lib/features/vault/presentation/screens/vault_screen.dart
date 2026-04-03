@@ -1,40 +1,60 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../../../../core/database/database_helper.dart';
+import 'package:provider/provider.dart';
 import '../../../../core/services/recipe_extractor.dart';
 import '../../../../core/services/iap_service.dart';
+import '../../../../data/repositories/recipe_repository.dart';
+import '../../../../domain/models/recipe.dart';
+import '../../../../main.dart';
 import '../../../cooking/presentation/screens/cooking_mode_screen.dart';
 import '../../../settings/presentation/screens/settings_screen.dart';
 import 'manual_recipe_entry_screen.dart';
 
-/// Provider for recipes list
-final recipesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  return await DatabaseHelper.instance.getAllRecipes();
-});
-
-/// Provider for recipe count
-final recipeCountProvider = FutureProvider<int>((ref) async {
-  return await DatabaseHelper.instance.getRecipeCount();
-});
-
 /// Main home screen - The Vault
-/// Displays a grid of saved recipes with search and add functionality
-class VaultScreen extends ConsumerStatefulWidget {
+class VaultScreen extends StatefulWidget {
   const VaultScreen({super.key});
 
   @override
-  ConsumerState<VaultScreen> createState() => _VaultScreenState();
+  State<VaultScreen> createState() => _VaultScreenState();
 }
 
-class _VaultScreenState extends ConsumerState<VaultScreen> {
+class _VaultScreenState extends State<VaultScreen> {
   final _searchController = TextEditingController();
-  List<Map<String, dynamic>>? _searchResults;
+  List<Recipe>? _allRecipes;
+  List<Recipe>? _searchResults;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRecipes();
+  }
 
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadRecipes() async {
+    try {
+      final recipes = await RecipeRepository.instance.getAllRecipes();
+      if (mounted) {
+        setState(() {
+          _allRecipes = recipes;
+          _loading = false;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
+    }
   }
 
   Future<void> _onSearch(String query) async {
@@ -45,16 +65,20 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       return;
     }
 
-    final results = await DatabaseHelper.instance.searchRecipes(query);
-    setState(() {
-      _searchResults = results;
-    });
+    final results = await RecipeRepository.instance.searchRecipes(query);
+    if (mounted) {
+      setState(() {
+        _searchResults = results;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final recipesAsync = ref.watch(recipesProvider);
-    final recipes = _searchResults ?? recipesAsync.value;
+    // Listen for refresh signals
+    context.watch<RecipeListNotifier>();
+
+    final displayRecipes = _searchResults ?? _allRecipes ?? [];
 
     return Scaffold(
       appBar: AppBar(
@@ -71,76 +95,65 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                 MaterialPageRoute(
                   builder: (context) => const SettingsScreen(),
                 ),
-              );
+              ).then((_) => _loadRecipes());
             },
           ),
         ],
       ),
-      body: recipesAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Text('Error loading recipes: $error'),
-        ),
-        data: (data) {
-          final displayRecipes = recipes ?? data;
-
-          if (displayRecipes.isEmpty) {
-            return _buildEmptyState(context);
-          }
-
-          return Column(
-            children: [
-              // Search bar
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _onSearch,
-                  decoration: InputDecoration(
-                    hintText: 'Search recipes...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              _onSearch('');
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(child: Text('Error loading recipes: $_error'))
+              : (_allRecipes?.isEmpty ?? true)
+                  ? _buildEmptyState(context)
+                  : Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: TextField(
+                            controller: _searchController,
+                            onChanged: _onSearch,
+                            decoration: InputDecoration(
+                              hintText: 'Search recipes...',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        _onSearch('');
+                                      },
+                                    )
+                                  : null,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              filled: true,
+                              fillColor: Colors.grey[100],
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GridView.builder(
+                            padding: const EdgeInsets.all(16),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 16,
+                              mainAxisSpacing: 16,
+                              childAspectRatio: 0.72,
+                            ),
+                            itemCount: displayRecipes.length,
+                            itemBuilder: (context, index) {
+                              return _buildRecipeCard(
+                                  context, displayRecipes[index]);
                             },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ],
                     ),
-                    filled: true,
-                    fillColor: Colors.grey[100],
-                  ),
-                ),
-              ),
-              // Recipe grid
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.all(16),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
-                    childAspectRatio: 0.75,
-                  ),
-                  itemCount: displayRecipes.length,
-                  itemBuilder: (context, index) {
-                    final recipe = displayRecipes[index];
-                    return _buildRecipeCard(context, recipe);
-                  },
-                ),
-              ),
-            ],
-          );
-        },
-      ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          _showAddRecipeDialog(context);
-        },
+        onPressed: () => _showAddRecipeDialog(context),
         icon: const Icon(Icons.add),
         label: const Text('Add Recipe'),
         backgroundColor: const Color(0xFFE67E22),
@@ -148,7 +161,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
   }
 
-  Widget _buildRecipeCard(BuildContext context, Map<String, dynamic> recipe) {
+  Widget _buildRecipeCard(BuildContext context, Recipe recipe) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(
@@ -156,7 +169,6 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       ),
       child: InkWell(
         onTap: () {
-          // Navigate to cooking mode
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -164,71 +176,65 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             ),
           );
         },
+        onLongPress: () => _showRecipeOptions(context, recipe),
         borderRadius: BorderRadius.circular(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Recipe image with caching
+            // Recipe image
             Expanded(
               child: ClipRRect(
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(12),
                 ),
-                child: recipe['image_path'] != null && (recipe['image_path'] as String).isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: recipe['image_path'] as String,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        placeholder: (context, url) => Container(
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        ),
-                        errorWidget: (context, url, error) => Container(
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: Icon(
-                              Icons.restaurant,
-                              size: 48,
-                              color: Colors.grey,
-                            ),
-                          ),
-                        ),
-                      )
-                    : Container(
-                        color: Colors.grey[300],
-                        child: const Center(
-                          child: Icon(
-                            Icons.restaurant,
-                            size: 48,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ),
+                child: _buildRecipeImage(recipe),
               ),
             ),
-            // Recipe title
+            // Recipe info
             Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(10.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    recipe['title'] as String? ?? 'Untitled Recipe',
+                    recipe.title.isNotEmpty ? recipe.title : 'Untitled Recipe',
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: 13,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (recipe['url'] != null) ...[
+                  if (recipe.tags.isNotEmpty) ...[
                     const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      children: recipe.tags
+                          .take(2)
+                          .map(
+                            (tag) => Chip(
+                              label: Text(
+                                tag,
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                              padding: EdgeInsets.zero,
+                              materialTapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              backgroundColor:
+                                  const Color(0xFFE67E22).withAlpha(30),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                  ],
+                  if (recipe.sourceUrl != null &&
+                      recipe.sourceUrl!.isNotEmpty) ...[
+                    const SizedBox(height: 2),
                     Text(
-                      recipe['url'] as String,
+                      recipe.sourceUrl!,
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 10,
                         color: Colors.grey[600],
                       ),
                       maxLines: 1,
@@ -239,6 +245,40 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecipeImage(Recipe recipe) {
+    if (recipe.imageLocalPath != null && recipe.imageLocalPath!.isNotEmpty) {
+      final file = File(recipe.imageLocalPath!);
+      return FutureBuilder<bool>(
+        future: file.exists(),
+        builder: (context, snapshot) {
+          if (snapshot.data == true) {
+            return Image.file(
+              file,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              errorBuilder: (context, error, stack) => _placeholderImage(),
+            );
+          }
+          return _placeholderImage();
+        },
+      );
+    }
+    return _placeholderImage();
+  }
+
+  Widget _placeholderImage() {
+    return Container(
+      color: Colors.grey[300],
+      child: const Center(
+        child: Icon(
+          Icons.restaurant,
+          size: 48,
+          color: Colors.grey,
         ),
       ),
     );
@@ -272,22 +312,209 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
   }
 
+  void _showRecipeOptions(BuildContext context, Recipe recipe) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.kitchen),
+              title: const Text('Cook Now'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CookingModeScreen(recipe: recipe),
+                  ),
+                );
+              },
+            ),
+            if (IAPService.instance.isPremium)
+              ListTile(
+                leading: const Icon(Icons.label),
+                title: const Text('Manage Tags'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showTagsDialog(context, recipe);
+                },
+              )
+            else
+              ListTile(
+                leading: const Icon(Icons.label_outlined),
+                title: const Text('Manage Tags (Premium)'),
+                subtitle: const Text('Upgrade to add custom tags'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showPremiumUpgradeDialog(context);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('Delete Recipe',
+                  style: TextStyle(color: Colors.red)),
+              onTap: () async {
+                Navigator.pop(context);
+                await _confirmDelete(context, recipe);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, Recipe recipe) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Recipe?'),
+        content: Text('Delete "${recipe.title}"? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await RecipeRepository.instance.deleteRecipe(recipe.id);
+      _loadRecipes();
+    }
+  }
+
+  void _showTagsDialog(BuildContext context, Recipe recipe) {
+    final tagController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Manage Tags'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                children: recipe.tags
+                    .map(
+                      (tag) => Chip(
+                        label: Text(tag),
+                        deleteIcon: const Icon(Icons.close, size: 16),
+                        onDeleted: () async {
+                          await RecipeRepository.instance
+                              .removeTag(recipe.id, tag);
+                          // Reload the recipe tags
+                          final updated =
+                              await RecipeRepository.instance
+                                  .getRecipe(recipe.id);
+                          if (updated != null && context.mounted) {
+                            setDialogState(() {
+                              recipe.tags.clear();
+                              recipe.tags.addAll(updated.tags);
+                            });
+                          }
+                        },
+                      ),
+                    )
+                    .toList(),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: tagController,
+                      decoration: const InputDecoration(
+                        hintText: 'Add tag (e.g., Dinner)',
+                        border: OutlineInputBorder(),
+                      ),
+                      onSubmitted: (_) async {
+                        final tag = tagController.text.trim();
+                        if (tag.isNotEmpty) {
+                          await RecipeRepository.instance
+                              .addTag(recipe.id, tag);
+                          tagController.clear();
+                          final updated =
+                              await RecipeRepository.instance
+                                  .getRecipe(recipe.id);
+                          if (updated != null && context.mounted) {
+                            setDialogState(() {
+                              recipe.tags.clear();
+                              recipe.tags.addAll(updated.tags);
+                            });
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () async {
+                      final tag = tagController.text.trim();
+                      if (tag.isNotEmpty) {
+                        await RecipeRepository.instance
+                            .addTag(recipe.id, tag);
+                        tagController.clear();
+                        final updated =
+                            await RecipeRepository.instance
+                                .getRecipe(recipe.id);
+                        if (updated != null && context.mounted) {
+                          setDialogState(() {
+                            recipe.tags.clear();
+                            recipe.tags.addAll(updated.tags);
+                          });
+                        }
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _loadRecipes();
+              },
+              child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _showAddRecipeDialog(BuildContext context) async {
     // Check recipe count and premium status
-    final recipeCount = await DatabaseHelper.instance.getRecipeCount();
+    final recipeCount = await RecipeRepository.instance.getRecipeCount();
     final isPremium = IAPService.instance.isPremium;
 
-    // Check if user hit free tier limit
     if (!isPremium && recipeCount >= 10) {
-      _showPremiumUpgradeDialog(context);
+      // ignore: use_build_context_synchronously
+      if (mounted) _showPremiumUpgradeDialog(context);
       return;
     }
 
     final urlController = TextEditingController();
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     showDialog(
+      // ignore: use_build_context_synchronously
       context: context,
       builder: (context) => _AddRecipeDialog(
         urlController: urlController,
@@ -300,10 +527,9 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             return;
           }
 
-          // Close dialog
           Navigator.pop(context);
 
-          // Show loading
+          // Show loading indicator
           showDialog(
             context: context,
             barrierDismissible: false,
@@ -325,43 +551,44 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           );
 
           try {
-            // Extract recipe
-            final extractedRecipe = await RecipeExtractor.instance.extractRecipe(url);
+            final extractedRecipe =
+                await RecipeExtractor.instance.extractRecipe(url);
 
             if (!context.mounted) return;
+            Navigator.pop(context); // close loading
 
-            // Close loading dialog
-            Navigator.pop(context);
-
-            if (extractedRecipe == null) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Could not extract recipe from URL. Please try adding manually.'),
-                  duration: Duration(seconds: 3),
+            // Navigate to ManualRecipeEntryScreen pre-filled with extracted data
+            final saved = await Navigator.push<bool>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ManualRecipeEntryScreen(
+                  prefillData: extractedRecipe,
+                  sourceUrl: url,
                 ),
-              );
-              return;
-            }
-
-            // Save to database
-            await DatabaseHelper.instance.insertRecipe(extractedRecipe);
-
-            // Refresh recipes list
-            ref.invalidate(recipesProvider);
-            ref.invalidate(recipeCountProvider);
-
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Recipe added successfully!')),
+              ),
             );
+
+            if (saved == true) {
+              _loadRecipes();
+            }
           } catch (e) {
             if (!context.mounted) return;
-
-            // Close loading dialog
-            Navigator.pop(context);
-
+            Navigator.pop(context); // close loading
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(content: Text('Error: $e')),
             );
+          }
+        },
+        onManual: () async {
+          Navigator.pop(context);
+          final saved = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const ManualRecipeEntryScreen(),
+            ),
+          );
+          if (saved == true) {
+            _loadRecipes();
           }
         },
       ),
@@ -401,12 +628,9 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              // Trigger IAP purchase
               final success = await IAPService.instance.purchase();
               if (!context.mounted) return;
-
               Navigator.pop(context);
-
               if (success) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Premium unlocked! Thank you!')),
@@ -428,10 +652,12 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 class _AddRecipeDialog extends StatelessWidget {
   final TextEditingController urlController;
   final VoidCallback onExtract;
+  final VoidCallback onManual;
 
   const _AddRecipeDialog({
     required this.urlController,
     required this.onExtract,
+    required this.onManual,
   });
 
   @override
@@ -446,7 +672,7 @@ class _AddRecipeDialog extends StatelessWidget {
             decoration: const InputDecoration(
               hintText: 'Paste recipe URL',
               prefixIcon: Icon(Icons.link),
-              helperText: 'Enter URL from NYT Cooking, AllRecipes, etc.',
+              helperText: 'Enter URL from AllRecipes, NYT Cooking, etc.',
             ),
             autofocus: true,
             textInputAction: TextInputAction.done,
@@ -466,30 +692,15 @@ class _AddRecipeDialog extends StatelessWidget {
           child: const Text('Cancel'),
         ),
         TextButton(
-          onPressed: () async {
-            Navigator.pop(context);
-
-            // Navigate to manual entry screen
-            final result = await Navigator.push<bool>(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const ManualRecipeEntryScreen(),
-              ),
-            );
-
-            // Refresh if recipe was added
-            if (result == true && context.mounted) {
-              // Trigger refresh - this will be handled by the caller
-            }
-          },
-          child: const Text('Or add manually'),
+          onPressed: onManual,
+          child: const Text('Add Manually'),
         ),
         ElevatedButton(
           onPressed: onExtract,
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFE67E22),
           ),
-          child: const Text('Extract Recipe'),
+          child: const Text('Extract'),
         ),
       ],
     );

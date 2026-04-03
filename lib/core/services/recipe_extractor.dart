@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:html/parser.dart' as parser;
 import 'package:html/dom.dart';
@@ -35,7 +36,7 @@ class RecipeExtractor {
 
       return null;
     } catch (e) {
-      print('Error extracting recipe: $e');
+      debugPrint('Error extracting recipe: $e');
       return null;
     }
   }
@@ -80,7 +81,7 @@ class RecipeExtractor {
         }
       }
     } catch (e) {
-      print('Error extracting from JSON-LD: $e');
+      debugPrint('Error extracting from JSON-LD: $e');
     }
     return null;
   }

@@ -1,126 +1,130 @@
+import 'dart:async';
 import 'dart:io';
-import 'package:flutter/services.dart';
-import 'package:purchases_flutter/purchases_flutter.dart';
+import 'package:flutter/foundation.dart';
+import 'package:in_app_purchase/in_app_purchase.dart';
 
-/// RevenueCat IAP service for ChefStash premium unlock
+/// IAP service for ChefStash premium unlock (non-consumable, one-time purchase)
 class IAPService {
   static final IAPService instance = IAPService._();
   IAPService._();
 
-  static const String _apiKeyIOS = 'YOUR_REVENUECAT_IOS_KEY';
-  static const String _apiKeyAndroid = 'YOUR_REVENUECAT_ANDROID_KEY';
-  static const String _entitlementID = 'premium';
   static const String _productID = 'chefstash_premium';
 
   bool _isPremium = false;
   bool get isPremium => _isPremium;
 
+  StreamSubscription<List<PurchaseDetails>>? _subscription;
+
   Future<void> initialize() async {
     try {
-      // Configure RevenueCat
-      await Purchases.setLogLevel(LogLevel.debug);
+      final available = await InAppPurchase.instance.isAvailable();
+      if (!available) return;
 
-      PurchasesConfiguration configuration;
-      if (Platform.isIOS) {
-        configuration = PurchasesConfiguration(_apiKeyIOS);
-      } else if (Platform.isAndroid) {
-        configuration = PurchasesConfiguration(_apiKeyAndroid);
-      } else {
-        return;
+      final Stream<List<PurchaseDetails>> purchaseUpdated =
+          InAppPurchase.instance.purchaseStream;
+
+      _subscription = purchaseUpdated.listen(
+        _onPurchaseUpdate,
+        onDone: _updateStreamOnDone,
+        onError: _updateStreamOnError,
+      );
+
+      // Restore previous purchases on init
+      await InAppPurchase.instance.restorePurchases();
+    } catch (e) {
+      debugPrint('Error initializing IAP: $e');
+    }
+  }
+
+  void _onPurchaseUpdate(List<PurchaseDetails> purchaseDetailsList) {
+    for (final purchaseDetails in purchaseDetailsList) {
+      if (purchaseDetails.productID == _productID) {
+        if (purchaseDetails.status == PurchaseStatus.purchased ||
+            purchaseDetails.status == PurchaseStatus.restored) {
+          _isPremium = true;
+        } else if (purchaseDetails.status == PurchaseStatus.error) {
+          debugPrint('Purchase error: ${purchaseDetails.error}');
+        }
+
+        if (purchaseDetails.pendingCompletePurchase) {
+          InAppPurchase.instance.completePurchase(purchaseDetails);
+        }
       }
-
-      await Purchases.configure(configuration);
-
-      // Check initial premium status
-      await checkPremiumStatus();
-
-      // Listen to customer info updates
-      Purchases.addCustomerInfoUpdateListener(_customerInfoUpdateListener);
-    } catch (e) {
-      print('Error initializing IAP: $e');
     }
   }
 
-  void _customerInfoUpdateListener(CustomerInfo customerInfo) {
-    _updatePremiumStatus(customerInfo);
+  void _updateStreamOnDone() {
+    _subscription?.cancel();
   }
 
-  Future<void> checkPremiumStatus() async {
-    try {
-      final customerInfo = await Purchases.getCustomerInfo();
-      _updatePremiumStatus(customerInfo);
-    } catch (e) {
-      print('Error checking premium status: $e');
-      // Default to false on error
-      _isPremium = false;
-    }
-  }
-
-  void _updatePremiumStatus(CustomerInfo customerInfo) {
-    final entitlement = customerInfo.entitlements.all[_entitlementID];
-    _isPremium = entitlement != null && entitlement.isActive;
+  void _updateStreamOnError(dynamic error) {
+    debugPrint('Purchase stream error: $error');
   }
 
   Future<bool> purchase() async {
     try {
-      final offerings = await Purchases.getOfferings();
-      final offering = offerings.current;
+      final available = await InAppPurchase.instance.isAvailable();
+      if (!available) return false;
 
-      if (offering == null) {
-        print('No offerings available');
+      final ProductDetailsResponse response =
+          await InAppPurchase.instance.queryProductDetails({_productID});
+
+      if (response.productDetails.isEmpty) {
+        debugPrint('No product found for $_productID');
+        // For testing: allow purchase in debug mode
+        if (kDebugMode) {
+          _isPremium = true;
+          return true;
+        }
         return false;
       }
 
-      final package = offering.availablePackages.firstWhere(
-        (pkg) => pkg.storeProduct.identifier == _productID,
-        orElse: () => offering.availablePackages.first,
+      final ProductDetails productDetails = response.productDetails.first;
+      final PurchaseParam purchaseParam = PurchaseParam(
+        productDetails: productDetails,
+        applicationUserName: null,
       );
 
-      final customerInfo = await Purchases.purchasePackage(package);
-
-      _updatePremiumStatus(customerInfo);
-      return _isPremium;
-    } on PlatformException catch (e) {
-      final errorCode = PurchasesErrorHelper.getErrorCode(e);
-      if (errorCode == PurchasesErrorCode.purchaseCancelledError) {
-        print('Purchase cancelled');
+      if (Platform.isAndroid) {
+        return await InAppPurchase.instance.buyNonConsumable(
+          purchaseParam: purchaseParam,
+        );
       } else {
-        print('Purchase error: $e');
+        return await InAppPurchase.instance.buyNonConsumable(
+          purchaseParam: purchaseParam,
+        );
       }
-      return false;
     } catch (e) {
-      print('Unexpected purchase error: $e');
+      debugPrint('Purchase error: $e');
       return false;
     }
   }
 
   Future<bool> restorePurchases() async {
     try {
-      final customerInfo = await Purchases.restorePurchases();
-      _updatePremiumStatus(customerInfo);
+      await InAppPurchase.instance.restorePurchases();
       return _isPremium;
     } catch (e) {
-      print('Error restoring purchases: $e');
+      debugPrint('Error restoring purchases: $e');
       return false;
     }
   }
 
   Future<String?> getPriceString() async {
     try {
-      final offerings = await Purchases.getOfferings();
-      final offering = offerings.current;
+      final ProductDetailsResponse response =
+          await InAppPurchase.instance.queryProductDetails({_productID});
 
-      if (offering == null) return null;
+      if (response.productDetails.isEmpty) return '\$19.99';
 
-      final package = offering.availablePackages.firstWhere(
-        (pkg) => pkg.storeProduct.identifier == _productID,
-        orElse: () => offering.availablePackages.first,
-      );
-
-      return package.storeProduct.priceString;
+      return response.productDetails.first.price;
     } catch (e) {
-      print('Error getting price: $e');
-      return null;
+      debugPrint('Error getting price: $e');
+      return '\$19.99';
     }
+  }
+
+  void dispose() {
+    _subscription?.cancel();
   }
 }

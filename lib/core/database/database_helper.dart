@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
@@ -265,7 +266,7 @@ CREATE TABLE recipe_tags (
         }
         imported++;
       } catch (e) {
-        print('Error importing recipe: $e');
+        debugPrint('Error importing recipe: $e');
       }
     }
 

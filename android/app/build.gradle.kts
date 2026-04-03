@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "top.heldig.chef.stash"
+    namespace = "com.heldiglab.chefstash"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -29,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "top.heldig.chef.stash"
+        applicationId = "com.heldiglab.chefstash"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -38,6 +38,8 @@ android {
 
     buildTypes {
         release {
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
         }
     }
